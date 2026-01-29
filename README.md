@@ -26,6 +26,10 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
 
 ## Usage
 
+```
+#include <axis-constrain.dtsi>
+```
+
 ```dts
 / {
     zip_axis_constrain: zip_axis_constrain {
@@ -34,6 +38,7 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
         threshold = <10>;
         sticky;
         release-after-ms = <150>;
+        track-remainders;
     };
 };
 
@@ -52,3 +57,8 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
 | `threshold` | 5 | Movement threshold before axis is determined |
 | `sticky` | false | Lock axis until movement stops |
 | `release-after-ms` | 100 | Timeout to release axis lock (when sticky) |
+| `track-remainders` | false | Preserve suppressed movement for axis switching |
+
+## License
+
+BSD 3-Clause License. See [LICENSE](LICENSE) for details.

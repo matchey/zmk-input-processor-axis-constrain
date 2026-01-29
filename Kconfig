@@ -1,0 +1,6 @@
+config ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN
+    bool "Enable axis constrain input processor"
+    default y
+    depends on ZMK_POINTING
+    help
+      Enable input processor that constrains trackball movement to a single axis (horizontal or vertical).

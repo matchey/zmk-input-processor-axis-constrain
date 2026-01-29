@@ -1,0 +1,38 @@
+description: |
+  Input processor that constrains trackball movement to a single axis.
+  Once movement exceeds the threshold, only horizontal or vertical axis
+  is allowed based on the initial movement direction.
+
+compatible: "zmk,input-processor-axis-constrain"
+
+# include: ip_zero_param.yaml
+
+properties:
+  "#input-processor-cells":
+    type: int
+    const: 0
+    description: "Number of cells in input processor specifier"
+
+  threshold:
+    type: int
+    default: 5
+    description: |
+      Movement threshold before axis direction is determined.
+      The axis is locked once cumulative movement exceeds this value.
+
+  sticky:
+    type: boolean
+    description: |
+      When enabled, locks the axis until movement stops.
+      When disabled, axis is determined per movement event.
+
+  release-after-ms:
+    type: int
+    default: 100
+    description: |
+      Timeout in milliseconds to release axis lock when sticky mode is enabled.
+      After this period of no movement, the axis lock is released.
+
+  track-remainders:
+    type: boolean
+    description: Preserve suppressed movement for axis switching
