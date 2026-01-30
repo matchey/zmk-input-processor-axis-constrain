@@ -5,6 +5,5 @@
         threshold = <5>;
         sticky;
         release-after-ms = <100>;
-        track-remainders;
     };
 };

@@ -33,6 +33,3 @@ properties:
       Timeout in milliseconds to release axis lock when sticky mode is enabled.
       After this period of no movement, the axis lock is released.
 
-  track-remainders:
-    type: boolean
-    description: Preserve suppressed movement for axis switching
