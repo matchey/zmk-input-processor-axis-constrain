@@ -35,4 +35,4 @@ properties:
 
   track-remainders:
     type: boolean
-    description: Preserve suppressed movement for axis switching
+
