@@ -1,3 +1,7 @@
+#
+# BSD-3-Clause
+# Copyright 2026 matchey
+#
 config ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN
     bool "Enable axis constrain input processor"
     default y

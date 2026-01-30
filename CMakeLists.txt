@@ -1,3 +1,7 @@
+#
+# BSD-3-Clause
+# Copyright 2026 matchey
+#
 if(CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN)
   target_include_directories(app PRIVATE include)
 

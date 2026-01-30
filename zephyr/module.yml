@@ -1,3 +1,7 @@
+#
+# BSD-3-Clause
+# Copyright 2026 matchey
+#
 name: zmk-input-processor-axis-constrain
 build:
   cmake: .
