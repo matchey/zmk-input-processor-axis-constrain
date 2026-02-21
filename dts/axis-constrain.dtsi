@@ -3,7 +3,6 @@
         compatible = "zmk,input-processor-axis-constrain";
         #input-processor-cells = <0>;
         /* threshold = <5>; */
-        /* sticky; */
         /* release-after-ms = <100>; */
         track-remainders;
     };

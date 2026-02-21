@@ -34,7 +34,6 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
 / {
     zip_axis_constrain: zip_axis_constrain {
         threshold = <10>;
-        sticky;
         release-after-ms = <150>;
     };
 };
@@ -52,8 +51,7 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
 | Property | Default | Description |
 |----------|---------|-------------|
 | `threshold` | 5 | Movement threshold before axis is determined |
-| `sticky` | false | Lock axis until movement stops |
-| `release-after-ms` | 100 | Timeout to release axis lock (when sticky) |
+| `release-after-ms` | 100 | Timeout to release axis lock |
 
 ## License
 

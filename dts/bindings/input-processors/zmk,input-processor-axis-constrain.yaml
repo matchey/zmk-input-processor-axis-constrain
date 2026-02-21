@@ -13,25 +13,20 @@ properties:
     const: 0
     description: "Number of cells in input processor specifier"
 
-  threshold:
+properties:
+  axis-lock-threshold:
     type: int
     default: 5
     description: |
-      Movement threshold before axis direction is determined.
+      Minimum movement required to determine axis direction.
       The axis is locked once cumulative movement exceeds this value.
-
-  sticky:
-    type: boolean
-    description: |
-      When enabled, locks the axis until movement stops.
-      When disabled, axis is determined per movement event.
 
   release-after-ms:
     type: int
-    default: 100
+    default: 0
     description: |
-      Timeout in milliseconds to release axis lock when sticky mode is enabled.
-      After this period of no movement, the axis lock is released.
+      Time in milliseconds before axis lock is released.
+      Set to 0 for immediate release (no sticky behavior).
 
   track-remainders:
     type: boolean

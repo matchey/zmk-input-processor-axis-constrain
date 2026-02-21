@@ -27,7 +27,6 @@ enum axis_state {
 
 struct axis_constrain_config {
   int  threshold;
-  bool sticky;
   int  release_after_ms;
 };
 
@@ -211,7 +210,8 @@ static int axis_constrain_handle_event(const struct device *dev, struct input_ev
 
   update_accum(data, is_x, event->value);
 
-  if (config->sticky) {
+  const bool sticky_mode = (config->release_after_ms > 0);
+  if (sticky_mode) {
     k_work_reschedule(&data->release_work, K_MSEC(config->release_after_ms));
     handle_sticky_mode(data, config, event, is_x);
   } else {
@@ -235,16 +235,14 @@ static int axis_constrain_init(const struct device *dev) {
   reset_state_locked(data);
   k_work_init_delayable(&data->release_work, release_work_handler);
 
-  LOG_DBG("Initialized (threshold=%d, sticky=%s, release_after_ms=%d)", config->threshold,
-          config->sticky ? "true" : "false", config->release_after_ms);
+  LOG_DBG("Initialized (threshold=%d, release_after_ms=%d)", config->threshold,
+          config->release_after_ms);
 
   return 0;
 }
 
 #define AC_INST(n)                                                                  \
   BUILD_ASSERT(DT_INST_PROP(n, threshold) > 0, "threshold must be greater than 0"); \
-  BUILD_ASSERT(!DT_INST_PROP(n, sticky) || DT_INST_PROP(n, release_after_ms) > 0,   \
-               "release_after_ms must be > 0 when sticky mode is enabled");         \
                                                                                     \
   static struct axis_constrain_data axis_constrain_data_##n = {                     \
       .lock = {},                                                                   \
@@ -252,7 +250,6 @@ static int axis_constrain_init(const struct device *dev) {
                                                                                     \
   static const struct axis_constrain_config axis_constrain_config_##n = {           \
       .threshold        = DT_INST_PROP(n, threshold),                               \
-      .sticky           = DT_INST_PROP(n, sticky),                                  \
       .release_after_ms = DT_INST_PROP(n, release_after_ms),                        \
   };                                                                                \
                                                                                     \
