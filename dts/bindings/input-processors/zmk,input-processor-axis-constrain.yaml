@@ -28,6 +28,13 @@ properties:
       Time in milliseconds before axis lock is released.
       Set to 0 for immediate release (no sticky behavior).
 
+  axis-tolerance-deg:
+    type: int
+    default: 45
+    description: |
+      Angular tolerance (in degrees) from the horizontal/vertical axis.
+      Movements within ±N° are treated as axis-aligned; set to 45 to accept all directions.
+
   track-remainders:
     type: boolean
 

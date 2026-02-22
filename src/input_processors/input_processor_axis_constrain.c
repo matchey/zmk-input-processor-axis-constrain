@@ -26,8 +26,9 @@ enum axis_state {
 };
 
 struct axis_constrain_config {
-  int  threshold;
-  int  release_after_ms;
+  int axis_lock_threshold;
+  int release_after_ms;
+  int axis_tolerance_deg;
 };
 
 struct axis_constrain_data {
@@ -39,6 +40,17 @@ struct axis_constrain_data {
   int32_t                 abs_accum_y;
   struct k_spinlock       lock;
   struct k_work_delayable release_work;
+};
+
+/*
+ * Lookup table for tan(angle) * 1000, where angle is 0-45 degrees.
+ * Used to avoid floating-point operations in the kernel.
+ * tan(0°)=0, tan(15°)≈0.268, tan(30°)≈0.577, tan(45°)=1.0
+ */
+static const int32_t tan_table_x1000[46] = {
+    0,   17,  35,  52,  70,  87,  105, 123, 141, 158, 176, 194, 213, 231,  249, 268,
+    287, 306, 325, 344, 364, 384, 404, 424, 445, 466, 488, 510, 532, 554,  577, 601,
+    625, 649, 675, 700, 727, 754, 781, 810, 839, 869, 900, 933, 966, 1000,
 };
 
 static inline void reset_state_locked(struct axis_constrain_data *data) {
@@ -78,18 +90,67 @@ static inline void update_accum(struct axis_constrain_data *data, bool is_x, int
   }
 }
 
-static enum axis_state determine_dominant_axis(struct axis_constrain_data *data, int threshold) {
-  if (data->abs_accum_x >= threshold && data->abs_accum_x > data->abs_accum_y) {
-    return AXIS_X;
+/*
+ * Check if the movement vector is within ±tolerance_deg from the given axis.
+ * For X-axis: angle from horizontal must be <= tolerance_deg
+ * For Y-axis: angle from vertical must be <= tolerance_deg
+ *
+ * Uses the formula: |minor| / |major| <= tan(tolerance_deg)
+ * Rearranged to avoid division: |minor| * 1000 <= |major| * tan_table_x1000[tolerance_deg]
+ */
+static bool is_within_axis_tolerance(int32_t abs_x, int32_t abs_y, enum axis_state axis,
+                                     int tolerance_deg) {
+  if (tolerance_deg >= 45) {
+    return true; /* Accept all directions */
   }
-  if (data->abs_accum_y >= threshold && data->abs_accum_y > data->abs_accum_x) {
-    return AXIS_Y;
+
+  int32_t tan_threshold = tan_table_x1000[tolerance_deg];
+  int64_t minor_scaled;
+  int64_t major_scaled;
+
+  if (axis == AXIS_X) {
+    /* For X-axis dominance, check if |y|/|x| <= tan(tolerance) */
+    minor_scaled = (int64_t)abs_y * 1000;
+    major_scaled = (int64_t)abs_x * tan_threshold;
+  } else {
+    /* For Y-axis dominance, check if |x|/|y| <= tan(tolerance) */
+    minor_scaled = (int64_t)abs_x * 1000;
+    major_scaled = (int64_t)abs_y * tan_threshold;
   }
-  /* Prefer X when equal for deterministic behavior */
-  if (data->abs_accum_x >= threshold && data->abs_accum_x == data->abs_accum_y) {
-    return AXIS_X;
+
+  return minor_scaled <= major_scaled;
+}
+
+static enum axis_state determine_dominant_axis(struct axis_constrain_data         *data,
+                                               const struct axis_constrain_config *config) {
+  int     axis_lock_threshold = config->axis_lock_threshold;
+  int     tolerance_deg       = config->axis_tolerance_deg;
+  int32_t abs_x               = data->abs_accum_x;
+  int32_t abs_y               = data->abs_accum_y;
+
+  enum axis_state candidate = AXIS_NONE;
+
+  if (abs_x >= axis_lock_threshold && abs_x > abs_y) {
+    candidate = AXIS_X;
+  } else if (abs_y >= axis_lock_threshold && abs_y > abs_x) {
+    candidate = AXIS_Y;
+  } else if (abs_x >= axis_lock_threshold && abs_x == abs_y) {
+    /* Prefer X when equal for deterministic behavior */
+    candidate = AXIS_X;
   }
-  return AXIS_NONE;
+
+  if (candidate == AXIS_NONE) {
+    return AXIS_NONE;
+  }
+
+  /* Check if within angular tolerance */
+  if (!is_within_axis_tolerance(abs_x, abs_y, candidate, tolerance_deg)) {
+    LOG_DBG("Outside tolerance: candidate=%s, abs_x=%d, abs_y=%d, tolerance=%d°",
+            candidate == AXIS_X ? "X" : "Y", abs_x, abs_y, tolerance_deg);
+    return AXIS_NONE;
+  }
+
+  return candidate;
 }
 
 static void release_work_handler(struct k_work *work) {
@@ -123,7 +184,7 @@ static void handle_sticky_mode(struct axis_constrain_data         *data,
                                const struct axis_constrain_config *config,
                                struct input_event *event, bool is_x) {
   if (data->locked_axis == AXIS_NONE) {
-    data->locked_axis = determine_dominant_axis(data, config->threshold);
+    data->locked_axis = determine_dominant_axis(data, config);
 
     if (data->locked_axis != AXIS_NONE) {
       LOG_DBG("Locked to %s axis (abs_accum_x=%d, abs_accum_y=%d)", axis_name(data->locked_axis),
@@ -132,8 +193,9 @@ static void handle_sticky_mode(struct axis_constrain_data         *data,
   }
 
   if (data->locked_axis == AXIS_NONE) {
-    LOG_DBG("Below threshold, suppressed %s: %d (abs_accum_x=%d, abs_accum_y=%d)", is_x ? "X" : "Y",
-            event->value, data->abs_accum_x, data->abs_accum_y);
+    LOG_DBG(
+        "Below threshold or outside tolerance, suppressed %s: %d (abs_accum_x=%d, abs_accum_y=%d)",
+        is_x ? "X" : "Y", event->value, data->abs_accum_x, data->abs_accum_y);
     event->value = 0;
     return;
   }
@@ -151,11 +213,12 @@ static void handle_sticky_mode(struct axis_constrain_data         *data,
 static void handle_non_sticky_mode(struct axis_constrain_data         *data,
                                    const struct axis_constrain_config *config,
                                    struct input_event *event, bool is_x) {
-  enum axis_state dominant = determine_dominant_axis(data, config->threshold);
+  enum axis_state dominant = determine_dominant_axis(data, config);
 
   if (dominant == AXIS_NONE) {
-    LOG_DBG("Below threshold, suppressed %s: %d (abs_accum_x=%d, abs_accum_y=%d)", is_x ? "X" : "Y",
-            event->value, data->abs_accum_x, data->abs_accum_y);
+    LOG_DBG(
+        "Below threshold or outside tolerance, suppressed %s: %d (abs_accum_x=%d, abs_accum_y=%d)",
+        is_x ? "X" : "Y", event->value, data->abs_accum_x, data->abs_accum_y);
     event->value = 0;
     return;
   }
@@ -175,16 +238,18 @@ static void handle_non_sticky_mode(struct axis_constrain_data         *data,
     if (dominant == AXIS_X) {
       data->accum_y     = 0;
       data->abs_accum_y = 0;
-      if (data->abs_accum_x > config->threshold) {
-        data->accum_x     = (data->accum_x > 0) ? config->threshold : -config->threshold;
-        data->abs_accum_x = config->threshold;
+      if (data->abs_accum_x > config->axis_lock_threshold) {
+        data->accum_x =
+            (data->accum_x > 0) ? config->axis_lock_threshold : -config->axis_lock_threshold;
+        data->abs_accum_x = config->axis_lock_threshold;
       }
     } else {
       data->accum_x     = 0;
       data->abs_accum_x = 0;
-      if (data->abs_accum_y > config->threshold) {
-        data->accum_y     = (data->accum_y > 0) ? config->threshold : -config->threshold;
-        data->abs_accum_y = config->threshold;
+      if (data->abs_accum_y > config->axis_lock_threshold) {
+        data->accum_y =
+            (data->accum_y > 0) ? config->axis_lock_threshold : -config->axis_lock_threshold;
+        data->abs_accum_y = config->axis_lock_threshold;
       }
     }
   }
@@ -235,26 +300,31 @@ static int axis_constrain_init(const struct device *dev) {
   reset_state_locked(data);
   k_work_init_delayable(&data->release_work, release_work_handler);
 
-  LOG_DBG("Initialized (threshold=%d, release_after_ms=%d)", config->threshold,
-          config->release_after_ms);
+  LOG_DBG("Initialized (axis_lock_threshold=%d, release_after_ms=%d, axis_tolerance_deg=%d)",
+          config->axis_lock_threshold, config->release_after_ms, config->axis_tolerance_deg);
 
   return 0;
 }
 
-#define AC_INST(n)                                                                  \
-  BUILD_ASSERT(DT_INST_PROP(n, threshold) > 0, "threshold must be greater than 0"); \
-                                                                                    \
-  static struct axis_constrain_data axis_constrain_data_##n = {                     \
-      .lock = {},                                                                   \
-  };                                                                                \
-                                                                                    \
-  static const struct axis_constrain_config axis_constrain_config_##n = {           \
-      .threshold        = DT_INST_PROP(n, threshold),                               \
-      .release_after_ms = DT_INST_PROP(n, release_after_ms),                        \
-  };                                                                                \
-                                                                                    \
-  DEVICE_DT_INST_DEFINE(n, axis_constrain_init, NULL, &axis_constrain_data_##n,     \
-                        &axis_constrain_config_##n, POST_KERNEL,                    \
+#define AC_INST(n)                                                              \
+  BUILD_ASSERT(DT_INST_PROP(n, axis_lock_threshold) > 0,                        \
+               "axis_lock_threshold must be greater than 0");                   \
+  BUILD_ASSERT(0 < DT_INST_PROP(n, axis_tolerance_deg) &&                       \
+                   DT_INST_PROP(n, axis_tolerance_deg) <= 45,                   \
+               "axis-tolerance-deg must be in the range (0, 45]");              \
+                                                                                \
+  static struct axis_constrain_data axis_constrain_data_##n = {                 \
+      .lock = {},                                                               \
+  };                                                                            \
+                                                                                \
+  static const struct axis_constrain_config axis_constrain_config_##n = {       \
+      .axis_lock_threshold = DT_INST_PROP(n, axis_lock_threshold),              \
+      .release_after_ms    = DT_INST_PROP(n, release_after_ms),                 \
+      .axis_tolerance_deg  = DT_INST_PROP(n, axis_tolerance_deg),               \
+  };                                                                            \
+                                                                                \
+  DEVICE_DT_INST_DEFINE(n, axis_constrain_init, NULL, &axis_constrain_data_##n, \
+                        &axis_constrain_config_##n, POST_KERNEL,                \
                         CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &axis_constrain_api);
 
 DT_INST_FOREACH_STATUS_OKAY(AC_INST)
