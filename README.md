@@ -15,7 +15,7 @@ manifest:
   projects:
     - name: zmk-input-processor-axis-constrain
       remote: matchey
-      revision: main
+      revision: v0.2.0
 ```
 
 Enable in `.conf`:
