@@ -33,9 +33,9 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
 ```dts
 / {
     zip_axis_constrain: zip_axis_constrain {
-        threshold = <10>;
-        sticky;
+        axis-lock-threshold = <10>;
         release-after-ms = <150>;
+        axis-tolerance-deg = <30>;
     };
 };
 
@@ -51,9 +51,9 @@ CONFIG_ZMK_INPUT_PROCESSOR_AXIS_CONSTRAIN=y
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `threshold` | 5 | Movement threshold before axis is determined |
-| `sticky` | false | Lock axis until movement stops |
-| `release-after-ms` | 100 | Timeout to release axis lock (when sticky) |
+| `axis-lock-threshold` | 5 | Movement threshold before axis is determined |
+| `release-after-ms` | 0 | Timeout to release axis lock |
+| `axis-tolerance-deg | 45 | Accept movement within ±N° of horizontal/vertical. Set to 45° to accept all directions. (0 < N ≤ 45) |
 
 ## License
 

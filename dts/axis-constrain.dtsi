@@ -2,9 +2,9 @@
     zip_axis_constrain: zip_axis_constrain {
         compatible = "zmk,input-processor-axis-constrain";
         #input-processor-cells = <0>;
-        /* threshold = <5>; */
-        /* sticky; */
+        /* axis-lock-threshold = <8>; */
         /* release-after-ms = <100>; */
+        /* axis-tolerance-deg = <30>; */
         track-remainders;
     };
 };
